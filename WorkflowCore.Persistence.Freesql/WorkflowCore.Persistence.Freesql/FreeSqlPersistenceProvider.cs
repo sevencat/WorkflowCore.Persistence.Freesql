@@ -18,136 +18,280 @@ public class FreeSqlPersistenceProvider : IPersistenceProvider
 		_canSyncDbStruct = canSyncDbStruct;
 	}
 
-	public Task<string> CreateNewWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
+	public async Task<string> CreateNewWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		workflow.Id = Guid.NewGuid().ToString();
+		var persistable = workflow.ToPersistable();
+		persistable.BeforeInsert();
+		await _fsql.Insert(persistable).ExecuteIdentityAsync(cancellationToken);
+		return workflow.Id;
 	}
 
-	public Task PersistWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
+	public async Task PersistWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var existingEntity = await _fsql.Select<TWorkflow>()
+			.Where(x => x.InstanceId == workflow.Id)
+			.FirstAsync(cancellationToken);
+		existingEntity?.AfterSelect();
+		var persistable = workflow.ToPersistable(existingEntity);
+		persistable.BeforeInsert();
+		await _fsql.InsertOrUpdate<TWorkflow>().SetSource(persistable).ExecuteAffrowsAsync(cancellationToken);
 	}
 
-	public Task PersistWorkflow(WorkflowInstance workflow, List<EventSubscription> subscriptions,
+	public async Task PersistWorkflow(WorkflowInstance workflow, List<EventSubscription> subscriptions,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var existingEntity = await _fsql.Select<TWorkflow>()
+			.Where(x => x.InstanceId == workflow.Id)
+			.FirstAsync(cancellationToken);
+		existingEntity?.AfterSelect();
+		var persistable = workflow.ToPersistable(existingEntity);
+		var subscriptionPersistables = subscriptions.Select((x) =>
+		{
+			x.Id = Guid.NewGuid().ToString();
+			var subscriptionPersistable = x.ToPersistable();
+			return subscriptionPersistable;
+		}).ToList();
+		_fsql.Transaction(() =>
+		{
+			persistable.BeforeInsert();
+			_fsql.InsertOrUpdate<TWorkflow>().SetSource(persistable).ExecuteAffrows();
+			_fsql.Insert(subscriptionPersistables).ExecuteAffrows();
+		});
 	}
 
-	public Task<IEnumerable<string>> GetRunnableInstances(DateTime asAt,
+	public async Task<IEnumerable<string>> GetRunnableInstances(DateTime asAt,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var now = asAt.ToUniversalTime().Ticks;
+		var dbitems = await _fsql.Select<TWorkflow>()
+			.Where(x => x.NextExecution.HasValue && (x.NextExecution <= now) && (x.Status == WorkflowStatus.Runnable))
+			.ToListAsync(x => x.InstanceId, cancellationToken);
+		return dbitems;
 	}
 
-	public Task<IEnumerable<WorkflowInstance>> GetWorkflowInstances(WorkflowStatus? status, string type,
-		DateTime? createdFrom, DateTime? createdTo, int skip,
-		int take)
+	public async Task<IEnumerable<WorkflowInstance>> GetWorkflowInstances(WorkflowStatus? status, string type,
+		DateTime? createdFrom, DateTime? createdTo, int skip, int take)
 	{
-		throw new NotImplementedException();
+		var query = _fsql.Select<TWorkflow>();
+		if (status.HasValue)
+			query = query.Where(x => x.Status == status.Value);
+
+		if (!String.IsNullOrEmpty(type))
+			query = query.Where(x => x.WorkflowDefinitionId == type);
+
+		if (createdFrom.HasValue)
+			query = query.Where(x => x.CreateTime >= createdFrom.Value);
+
+		if (createdTo.HasValue)
+			query = query.Where(x => x.CreateTime <= createdTo.Value);
+
+		var dbitems = await query.Skip(skip).Take(take).ToListAsync();
+		return dbitems.Select((x) =>
+		{
+			x.AfterSelect();
+			return x.ToWorkflowInstance();
+		});
 	}
 
-	public Task<WorkflowInstance> GetWorkflowInstance(string Id, CancellationToken cancellationToken)
+	public async Task<WorkflowInstance> GetWorkflowInstance(string Id, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var existingEntity = await _fsql.Select<TWorkflow>()
+			.Where(x => x.InstanceId == Id)
+			.FirstAsync(cancellationToken);
+		existingEntity?.AfterSelect();
+		return existingEntity?.ToWorkflowInstance();
 	}
 
-	public Task<IEnumerable<WorkflowInstance>> GetWorkflowInstances(IEnumerable<string> ids,
+	public async Task<IEnumerable<WorkflowInstance>> GetWorkflowInstances(IEnumerable<string> ids,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		if (ids == null)
+		{
+			return new List<WorkflowInstance>();
+		}
+
+		var dbitems = await _fsql.Select<TWorkflow>()
+			.Where(x => ids.Contains(x.InstanceId))
+			.ToListAsync(cancellationToken);
+		return dbitems.Select((x) =>
+		{
+			x.AfterSelect();
+			return x.ToWorkflowInstance();
+		});
 	}
 
-	public Task<string> CreateEventSubscription(EventSubscription subscription,
+	public async Task<string> CreateEventSubscription(EventSubscription subscription,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		subscription.Id = Guid.NewGuid().ToString();
+		var persistable = subscription.ToPersistable();
+		await _fsql.Insert(persistable).ExecuteIdentityAsync(cancellationToken);
+		return subscription.Id;
 	}
 
-	public Task<IEnumerable<EventSubscription>> GetSubscriptions(string eventName, string eventKey, DateTime asOf,
+	public async Task<IEnumerable<EventSubscription>> GetSubscriptions(string eventName, string eventKey, DateTime asOf,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		asOf = asOf.ToUniversalTime();
+		var dbitems = await _fsql.Select<TSubscription>()
+			.Where(x => x.EventName == eventName && x.EventKey == eventKey && x.SubscribeAsOf <= asOf)
+			.ToListAsync(cancellationToken);
+		return dbitems.Select(item => item.ToEventSubscription()).ToList();
 	}
 
-	public Task TerminateSubscription(string eventSubscriptionId,
+	public async Task TerminateSubscription(string eventSubscriptionId,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		await _fsql.Delete<TSubscription>().Where(x => x.SubscriptionId == eventSubscriptionId)
+			.ExecuteAffrowsAsync(cancellationToken);
 	}
 
-	public Task<EventSubscription> GetSubscription(string eventSubscriptionId,
+	public async Task<EventSubscription> GetSubscription(string eventSubscriptionId,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var dbitem = await _fsql.Select<TSubscription>().Where(x => x.SubscriptionId == eventSubscriptionId)
+			.FirstAsync(cancellationToken);
+		return dbitem?.ToEventSubscription();
 	}
 
-	public Task<EventSubscription> GetFirstOpenSubscription(string eventName, string eventKey, DateTime asOf,
+	public async Task<EventSubscription> GetFirstOpenSubscription(string eventName, string eventKey, DateTime asOf,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var dbitem = await _fsql.Select<TSubscription>()
+			.Where(x => x.EventName == eventName && x.EventKey == eventKey && x.SubscribeAsOf <= asOf &&
+			            x.ExternalToken == null)
+			.FirstAsync(cancellationToken);
+		return dbitem?.ToEventSubscription();
 	}
 
-	public Task<bool> SetSubscriptionToken(string eventSubscriptionId, string token, string workerId, DateTime expiry,
+	public async Task<bool> SetSubscriptionToken(string eventSubscriptionId, string token, string workerId,
+		DateTime expiry,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var rows = await _fsql.Update<TSubscription>()
+			.Set(x => x.ExternalToken, token)
+			.Set(x => x.ExternalWorkerId, workerId)
+			.Set(x => x.ExternalTokenExpiry, expiry)
+			.Where(x => x.SubscriptionId == eventSubscriptionId)
+			.ExecuteAffrowsAsync(cancellationToken);
+
+		return rows > 0;
 	}
 
-	public Task ClearSubscriptionToken(string eventSubscriptionId, string token,
+	public async Task ClearSubscriptionToken(string eventSubscriptionId, string token,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		await _fsql.Update<TSubscription>()
+			.Set(x => x.ExternalToken, null)
+			.Set(x => x.ExternalWorkerId, null)
+			.Set(x => x.ExternalTokenExpiry, null)
+			.Where(x => x.SubscriptionId == eventSubscriptionId)
+			.ExecuteAffrowsAsync(cancellationToken);
 	}
 
-	public Task<string> CreateEvent(Event newEvent, CancellationToken cancellationToken)
+	public async Task<string> CreateEvent(Event newEvent, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		newEvent.Id = Guid.NewGuid().ToString();
+		var persistable = newEvent.ToPersistable();
+		await _fsql.Insert(persistable).ExecuteIdentityAsync(cancellationToken);
+		return newEvent.Id;
 	}
 
-	public Task<Event> GetEvent(string id, CancellationToken cancellationToken)
+	public async Task<Event> GetEvent(string id, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var dbitem = await _fsql.Select<TEvent>().Where(x => x.EventId == id).FirstAsync(cancellationToken);
+		return dbitem?.ToEvent();
 	}
 
-	public Task<IEnumerable<string>> GetRunnableEvents(DateTime asAt,
+	public async Task<IEnumerable<string>> GetRunnableEvents(DateTime asAt,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var now = asAt.ToUniversalTime();
+		asAt = asAt.ToUniversalTime();
+		var dbitems = await _fsql.Select<TEvent>()
+			.Where(x => !x.IsProcessed)
+			.Where(x => x.EventTime <= now)
+			.ToListAsync(x => x.EventId, cancellationToken);
+		return dbitems.Select(s => s.ToString()).ToList();
 	}
 
-	public Task<IEnumerable<string>> GetEvents(string eventName, string eventKey, DateTime asOf,
+	public async Task<IEnumerable<string>> GetEvents(string eventName, string eventKey, DateTime asOf,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var dbitems = await _fsql.Select<TEvent>()
+			.Where(x => x.EventName == eventName && x.EventKey == eventKey)
+			.Where(x => x.EventTime >= asOf)
+			.ToListAsync(x => x.EventId, cancellationToken);
+
+		var result = new List<string>();
+		foreach (var s in dbitems)
+			result.Add(s);
+		return result;
 	}
 
-	public Task MarkEventProcessed(string id, CancellationToken cancellationToken)
+	public async Task MarkEventProcessed(string id, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		await _fsql.Update<TEvent>()
+			.Set(x => x.IsProcessed, true)
+			.Where(x => x.EventId == id)
+			.ExecuteAffrowsAsync(cancellationToken);
 	}
 
-	public Task MarkEventUnprocessed(string id, CancellationToken cancellationToken)
+	public async Task MarkEventUnprocessed(string id, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		await _fsql.Update<TEvent>()
+			.Set(x => x.IsProcessed, false)
+			.Where(x => x.EventId == id)
+			.ExecuteAffrowsAsync(cancellationToken);
 	}
 
-	public Task ScheduleCommand(ScheduledCommand command)
+	public async Task ScheduleCommand(ScheduledCommand command)
 	{
-		throw new NotImplementedException();
+		var persistable = command.ToPersistable();
+		await _fsql.Insert(persistable).ExecuteIdentityAsync();
 	}
 
 	public Task ProcessCommands(DateTimeOffset asOf, Func<ScheduledCommand, Task> action,
 		CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var cursor = _fsql.Select<TScheduledCommand>()
+			.Where(x => x.ExecuteTime < asOf.UtcDateTime.Ticks)
+			.ToList();
+
+		foreach (var command in cursor)
+		{
+			try
+			{
+				action(command.ToScheduledCommand());
+				_fsql.Delete<TScheduledCommand>().Where(x => x.PersistenceId == command.PersistenceId)
+					.ExecuteAffrows();
+			}
+			catch (Exception)
+			{
+				//TODO
+			}
+		}
+
+		return Task.CompletedTask;
 	}
 
 	public bool SupportsScheduledCommands { get; } = true;
 
 	public Task PersistErrors(IEnumerable<ExecutionError> errors, CancellationToken cancellationToken)
 	{
-		throw new NotImplementedException();
+		var executionErrors = errors as ExecutionError[] ?? errors.ToArray();
+		if (executionErrors.Any())
+		{
+			_fsql.Transaction(() =>
+			{
+				foreach (var error in executionErrors)
+				{
+					_fsql.Insert(error.ToPersistable()).ExecuteIdentity();
+				}
+			});
+		}
+		return Task.CompletedTask;
 	}
 
 	public void EnsureStoreExists()

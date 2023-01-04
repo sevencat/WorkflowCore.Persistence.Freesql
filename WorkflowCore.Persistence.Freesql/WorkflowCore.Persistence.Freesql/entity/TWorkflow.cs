@@ -1,4 +1,5 @@
 ﻿using FreeSql.DataAnnotations;
+using WorkflowCore.Models;
 
 namespace WorkflowCore.Persistence.Freesql.entity;
 
@@ -27,7 +28,7 @@ public class TWorkflow
 	public long? NextExecution { get; set; }
 
 	[Column(IsNullable = false)]
-	public int Status { get; set; }
+	public WorkflowStatus Status { get; set; }
 
 	[Column(IsNullable = false)]
 	public int Version { get; set; }
@@ -37,10 +38,20 @@ public class TWorkflow
 
 	[Column(StringLength = 200)]
 	public string Reference { get; set; }
-	
+
 	[Column(DbType = "LONGTEXT")]
-	public string ExecutionPointers { get; set; }
+	public string SExecutionPointers { get; set; }
 
 	[Column(IsIgnore = true)]
-	public Dictionary<string, MExecutionPointer> DataExecutionPointers { get; set; } = new();
+	public Dictionary<string, MExecutionPointer> ExecutionPointers { get; set; } = new();
+
+	public void BeforeInsert()
+	{
+		SExecutionPointers = ExecutionPointers.ToJson();
+	}
+
+	public void AfterSelect()
+	{
+		ExecutionPointers = SExecutionPointers.FromJson<Dictionary<string, MExecutionPointer>>();
+	}
 }

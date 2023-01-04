@@ -4,15 +4,24 @@ using WorkflowCore.Persistence.Freesql.entity;
 
 namespace WorkflowCore.Persistence.Freesql;
 
-public static class EntityConvert
+public static class EntityConverter
 {
 	private static readonly JsonSerializerSettings SerializerSettings = new JsonSerializerSettings
 		{ TypeNameHandling = TypeNameHandling.All };
 
+	public static string ToJson(this object obj)
+	{
+		return JsonConvert.SerializeObject(obj, SerializerSettings);
+	}
+	
+	public static T FromJson<T>(this string obj)
+	{
+		return JsonConvert.DeserializeObject<T>(obj, SerializerSettings);
+	}
+
 	public static TWorkflow ToPersistable(this WorkflowInstance instance, TWorkflow persistable = null)
 	{
 		persistable ??= new TWorkflow();
-
 		persistable.Data = JsonConvert.SerializeObject(instance.Data, SerializerSettings);
 		persistable.Description = instance.Description;
 		persistable.Reference = instance.Reference;
@@ -20,20 +29,20 @@ public static class EntityConvert
 		persistable.NextExecution = instance.NextExecution;
 		persistable.Version = instance.Version;
 		persistable.WorkflowDefinitionId = instance.WorkflowDefinitionId;
-		persistable.Status = (int)instance.Status;
+		persistable.Status = instance.Status;
 		persistable.CreateTime = instance.CreateTime;
 		persistable.CompleteTime = instance.CompleteTime;
 
 		foreach (var ep in instance.ExecutionPointers)
 		{
 			var epId = ep.Id ?? Guid.NewGuid().ToString();
-			if (!persistable.DataExecutionPointers.TryGetValue(epId, out var persistedEP))
+			if (!persistable.ExecutionPointers.TryGetValue(epId, out var persistedEP))
 			{
 				persistedEP = new MExecutionPointer
 				{
 					Id = epId
 				};
-				persistable.DataExecutionPointers.Add(epId,persistedEP);
+				persistable.ExecutionPointers.Add(epId, persistedEP);
 			}
 
 			persistedEP.StepId = ep.StepId;
@@ -75,7 +84,6 @@ public static class EntityConvert
 				persistedAttr.AttributeValue = JsonConvert.SerializeObject(attr.Value, SerializerSettings);
 			}
 		}
-
 		return persistable;
 	}
 
@@ -90,15 +98,15 @@ public static class EntityConvert
 			NextExecution = instance.NextExecution,
 			Version = instance.Version,
 			WorkflowDefinitionId = instance.WorkflowDefinitionId,
-			Status = (WorkflowStatus)instance.Status,
+			Status = instance.Status,
 			CreateTime = DateTime.SpecifyKind(instance.CreateTime, DateTimeKind.Utc)
 		};
 		if (instance.CompleteTime.HasValue)
 			result.CompleteTime = DateTime.SpecifyKind(instance.CompleteTime.Value, DateTimeKind.Utc);
 
-		result.ExecutionPointers = new ExecutionPointerCollection(instance.DataExecutionPointers.Count + 8);
+		result.ExecutionPointers = new ExecutionPointerCollection(instance.ExecutionPointers.Count + 8);
 
-		foreach (var ep in instance.DataExecutionPointers.Values)
+		foreach (var ep in instance.ExecutionPointers.Values)
 		{
 			var pointer = new ExecutionPointer
 			{
