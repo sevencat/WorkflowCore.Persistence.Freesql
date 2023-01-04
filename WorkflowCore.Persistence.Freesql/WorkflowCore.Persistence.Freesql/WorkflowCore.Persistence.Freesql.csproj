@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <PackageReference Include="FreeSql" Version="3.2.685" />
+      <PackageReference Include="FreeSql.Extensions.JsonMap" Version="3.2.685" />
       <PackageReference Include="WorkflowCore" Version="3.8.1" />
     </ItemGroup>
 
