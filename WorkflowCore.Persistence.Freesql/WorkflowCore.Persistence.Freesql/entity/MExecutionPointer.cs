@@ -40,7 +40,7 @@ public class MExecutionPointer
 
 	public string Scope { get; set; }
 
-	public int Status { get; set; } = (int)PointerStatus.Legacy;
+	public PointerStatus Status { get; set; } = PointerStatus.Legacy;
 
 	public List<MExtensionAttribute> ExtensionAttributes { get; set; } = new();
 }

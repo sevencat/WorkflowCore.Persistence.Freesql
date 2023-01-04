@@ -65,7 +65,7 @@ public static class EntityConverter
 			persistedEP.EventPublished = ep.EventPublished;
 			persistedEP.EventData = JsonConvert.SerializeObject(ep.EventData, SerializerSettings);
 			persistedEP.Outcome = JsonConvert.SerializeObject(ep.Outcome, SerializerSettings);
-			persistedEP.Status = (int)ep.Status;
+			persistedEP.Status = ep.Status;
 
 			persistedEP.Scope = string.Empty;
 			foreach (var item in ep.Scope)
@@ -141,7 +141,7 @@ public static class EntityConverter
 			pointer.EventPublished = ep.EventPublished;
 			pointer.EventData = JsonConvert.DeserializeObject(ep.EventData ?? string.Empty, SerializerSettings);
 			pointer.Outcome = JsonConvert.DeserializeObject(ep.Outcome ?? string.Empty, SerializerSettings);
-			pointer.Status = (PointerStatus)ep.Status;
+			pointer.Status = ep.Status;
 
 			if (!string.IsNullOrEmpty(ep.Scope))
 			{
