@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>disable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Authors>sevencat</Authors>
         <PackageProjectUrl>https://github.com/sevencat/WorkflowCore.Persistence.Freesql</PackageProjectUrl>
         <RepositoryUrl>https://github.com/sevencat/WorkflowCore.Persistence.Freesql</RepositoryUrl>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+        <Version>1.0.1</Version>
     </PropertyGroup>
 
     <ItemGroup>

@@ -19,9 +19,9 @@ public static class EntityConverter
 		return JsonConvert.DeserializeObject<T>(obj, SerializerSettings);
 	}
 
-	public static TWorkflow ToPersistable(this WorkflowInstance instance, TWorkflow persistable = null)
+	public static TWorkflow ToPersistable(this WorkflowInstance instance)
 	{
-		persistable ??= new TWorkflow();
+		var persistable = new TWorkflow();
 		persistable.Data = JsonConvert.SerializeObject(instance.Data, SerializerSettings);
 		persistable.Description = instance.Description;
 		persistable.Reference = instance.Reference;

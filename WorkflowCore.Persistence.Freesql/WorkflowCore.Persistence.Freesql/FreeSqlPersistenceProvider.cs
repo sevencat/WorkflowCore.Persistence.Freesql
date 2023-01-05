@@ -27,25 +27,23 @@ public class FreeSqlPersistenceProvider : IPersistenceProvider
 		return workflow.Id;
 	}
 
-	public async Task PersistWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
+	public Task PersistWorkflow(WorkflowInstance workflow, CancellationToken cancellationToken)
 	{
-		var existingEntity = await _fsql.Select<TWorkflow>()
-			.Where(x => x.InstanceId == workflow.Id)
-			.FirstAsync(cancellationToken);
-		existingEntity?.AfterSelect();
-		var persistable = workflow.ToPersistable(existingEntity);
+		var persistable = workflow.ToPersistable();
 		persistable.BeforeInsert();
-		await _fsql.InsertOrUpdate<TWorkflow>().SetSource(persistable).ExecuteAffrowsAsync(cancellationToken);
+		_fsql.Transaction(() =>
+		{
+			_fsql.Delete<TWorkflow>().Where(x => x.InstanceId == workflow.Id).ExecuteAffrows();
+			_fsql.Insert(persistable).ExecuteIdentity();
+		});
+		return Task.CompletedTask;
 	}
 
-	public async Task PersistWorkflow(WorkflowInstance workflow, List<EventSubscription> subscriptions,
+	public Task PersistWorkflow(WorkflowInstance workflow, List<EventSubscription> subscriptions,
 		CancellationToken cancellationToken)
 	{
-		var existingEntity = await _fsql.Select<TWorkflow>()
-			.Where(x => x.InstanceId == workflow.Id)
-			.FirstAsync(cancellationToken);
-		existingEntity?.AfterSelect();
-		var persistable = workflow.ToPersistable(existingEntity);
+		var persistable = workflow.ToPersistable();
+		persistable.BeforeInsert();
 		var subscriptionPersistables = subscriptions.Select((x) =>
 		{
 			x.Id = Guid.NewGuid().ToString();
@@ -54,10 +52,12 @@ public class FreeSqlPersistenceProvider : IPersistenceProvider
 		}).ToList();
 		_fsql.Transaction(() =>
 		{
-			persistable.BeforeInsert();
-			_fsql.InsertOrUpdate<TWorkflow>().SetSource(persistable).ExecuteAffrows();
+			
+			_fsql.Delete<TWorkflow>().Where(x => x.InstanceId == workflow.Id).ExecuteAffrows();
+			_fsql.Insert(persistable).ExecuteIdentity();
 			_fsql.Insert(subscriptionPersistables).ExecuteAffrows();
 		});
+		return Task.CompletedTask;
 	}
 
 	public async Task<IEnumerable<string>> GetRunnableInstances(DateTime asAt,
@@ -267,9 +267,9 @@ public class FreeSqlPersistenceProvider : IPersistenceProvider
 				_fsql.Delete<TScheduledCommand>().Where(x => x.PersistenceId == command.PersistenceId)
 					.ExecuteAffrows();
 			}
-			catch (Exception)
+			catch (Exception e)
 			{
-				//TODO
+				_logger.Log(LogLevel.Error,"ProcessCommands error:{errmsg}",e.Message);
 			}
 		}
 
