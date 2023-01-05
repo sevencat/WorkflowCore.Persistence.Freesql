@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sample1.Steps;
 using WorkflowCore.Interface;
 using WorkflowCore.Persistence.Freesql;
-using WorkflowCore.Sample01;
 
 namespace Sample1;
 
@@ -28,8 +28,7 @@ class Program
 	{
 		//setup dependency injection
 		IServiceCollection services = new ServiceCollection();
-		services.AddLogging();
-		
+		services.AddLogging((opt) => { opt.AddConsole(); });
 		var connstr =
 			@"Server=127.0.0.1;Database=wfc;User=root;Password=123456;";
 		var fsql = new FreeSql.FreeSqlBuilder()
@@ -37,7 +36,7 @@ class Program
 			.UseAutoSyncStructure(false)
 			.Build();
 		services.AddSingleton(fsql);
-		
+
 		services.AddWorkflow(x => x.UseFreeSql(true));
 		services.AddTransient<GoodbyeWorld>();
 
